@@ -1,0 +1,91 @@
+---
+- hosts: "{{ var_host | default('itop')}}"
+  become: yes
+  become_user: root
+  vars:
+    depot: /home/kwan/src/ansible/files/
+    install_zip: iTop-2.3.3-3159.zip
+
+  tasks:
+  - name: Install baseline packages
+    yum: name=php state=latest
+  - yum: name=php-mysql state=latest
+  - yum: name=php-xml state=latest
+  - yum: name=php-soap state=latest
+  - yum: name=php-gd state=latest
+  - yum: name=php-ldap state=latest
+  - yum: name=php-mcrypt state=latest
+  - yum: name=mariadb-server state=latest
+  - yum: name=unzip state=latest
+  - yum: name=mysql-connector-python state=latest
+  - yum: name=MySQL-python state=latest
+  - yum: name=graphviz state=latest
+
+  - name: "Extract iTop package"
+    file:
+      path: /var/www/html/itop/
+      state: directory
+      mode: 0755
+      owner: apache
+      group: apache
+
+  - unarchive:
+      src: "{{ depot }}/{{ install_zip }}"
+      dest: /var/www/html/itop
+
+  - name: "Set web path permissions"
+    file: 
+      path: /var/www/html/itop/web
+      state: directory
+      mode: 0755
+      owner: apache
+      group: apache
+
+  - name: "Set log path permissions"
+    file: 
+      path: /var/www/html/itop/web/log
+      state: directory
+      mode: 0755
+      owner: apache
+      group: apache
+
+  - name: "Set SELinux log path permissions"
+    sefcontext: 
+      target: '/var/www/html/itop/web(/.*)?'
+      setype: httpd_sys_content_t
+      state: present
+
+  - name: "Set SELinux httpd_can_network_connect"
+    seboolean:
+      name: httpd_can_network_connect
+      state: yes
+      persistent: yes
+
+  - name: "Set SELinux httpd_unified"
+    seboolean:
+      name: httpd_unified
+      state: yes
+      persistent: yes
+
+  - name: "Configure web server"
+    service:
+      name: httpd
+      state: started
+
+  - name: "Adjust MariaDB max_allowed_packet"
+    lineinfile:
+      path: /etc/my.cnf
+      insertafter: '^\[mysqld\]$'
+      line: max_allowed_packet=2097652
+
+  - name: "Start database server"
+    service:
+      name: mariadb
+      state: started
+
+  - name: "Configure iTop Database"
+    mysql_user:
+      name: itop
+      password: MySecretPassword
+      priv: '*.*:ALL'
+      state: present
